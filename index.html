@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>HiMonster Hunter: The Last Hunt</title>
+<style>
+  :root{
+    --bg:#070a0f; --panel:#0e141d; --line:#1d2733; --txt:#e8eef6;
+    --muted:#8aa0b8; --accent:#39d2c0; --gold:#f6c45a; --danger:#ff5a6a;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+    font-family:"DM Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    overflow:hidden;overscroll-behavior:none;touch-action:none;}
+  .screen{position:fixed;inset:0;display:none;}
+  .screen.active{display:block;}
+
+  /* ---------- MENU ---------- */
+  #menu{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:28px;}
+  .logo{font-weight:800;letter-spacing:.5px;font-size:30px;text-align:center;line-height:1.15;}
+  .logo span{color:var(--accent);}
+  .sub{color:var(--muted);font-size:13px;text-align:center;max-width:320px;margin-top:-6px;}
+  .btn{width:100%;max-width:340px;padding:16px 18px;border-radius:16px;border:1px solid var(--line);
+    background:var(--panel);color:var(--txt);font-size:16px;font-weight:600;display:flex;align-items:center;gap:12px;cursor:pointer;}
+  .btn:active{transform:scale(.985);}
+  .btn .ic{font-size:20px;width:26px;text-align:center;}
+  .btn small{display:block;color:var(--muted);font-weight:400;font-size:12px;margin-top:2px;}
+  .btn b{font-weight:700;}
+  .field{width:100%;max-width:340px;}
+  .field input{width:100%;padding:15px;border-radius:14px;border:1px solid var(--line);background:#0a0f16;
+    color:var(--txt);font-size:22px;letter-spacing:6px;text-align:center;text-transform:uppercase;font-weight:700;}
+  .hint{color:var(--muted);font-size:11px;text-align:center;max-width:340px;}
+
+  /* ---------- CONTROLLER ---------- */
+  #controller{display:flex;flex-direction:column;background:radial-gradient(120% 80% at 50% 0%,#10202a 0%,#070a0f 70%);}
+  .ctop{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;}
+  .status{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--danger);}
+  .dot.ok{background:var(--accent);box-shadow:0 0 10px var(--accent);}
+  .pill{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:#0c121a;font-size:12px;color:var(--txt);}
+  .arrowsel{display:flex;gap:8px;justify-content:center;padding:6px 12px;flex-wrap:wrap;}
+  .arrowsel .a{padding:9px 12px;border-radius:12px;border:1px solid var(--line);background:#0c121a;font-size:12px;color:var(--muted);}
+  .arrowsel .a.on{color:#07120f;font-weight:700;}
+  .drawzone{flex:1;margin:10px;border-radius:24px;border:1px dashed var(--line);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;position:relative;background:#0a0f16;}
+  .drawzone .big{font-size:18px;font-weight:700;text-align:center;padding:0 24px;}
+  .drawzone .small{font-size:13px;color:var(--muted);text-align:center;padding:0 30px;line-height:1.5;}
+  .powerbar{position:absolute;left:18px;top:18px;bottom:18px;width:14px;border-radius:10px;background:#0c121a;border:1px solid var(--line);overflow:hidden;}
+  .powerbar i{position:absolute;left:0;right:0;bottom:0;height:0%;background:linear-gradient(180deg,var(--danger),var(--gold),var(--accent));}
+  .cbtns{display:flex;gap:10px;padding:0 12px 14px;}
+  .cbtns .btn{max-width:none;}
+
+  /* ---------- DISPLAY / GAME ---------- */
+  #display{background:#000;}
+  #game{display:block;width:100%;height:100%;}
+  .overlay{position:fixed;inset:0;pointer-events:none;}
+  .room-banner{position:fixed;top:0;left:0;right:0;display:flex;justify-content:center;padding:16px;}
+  .room-card{background:rgba(8,12,18,.78);border:1px solid var(--line);border-radius:18px;padding:18px 26px;text-align:center;backdrop-filter:blur(8px);}
+  .room-card .code{font-size:44px;font-weight:800;letter-spacing:10px;color:var(--accent);}
+  .room-card .qrbox{background:#fff;padding:10px;border-radius:14px;display:inline-block;margin:8px 0;}
+  .room-card .qrbox img,.room-card .qrbox canvas{display:block;}
+  .room-card .lbl{font-size:12px;color:var(--muted);letter-spacing:2px;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(8,12,18,.85);
+    border:1px solid var(--line);padding:10px 16px;border-radius:12px;font-size:13px;color:var(--muted);}
+  .center-msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;}
+  .center-msg h1{font-size:38px;margin:0;}
+  .center-msg p{color:var(--muted);margin:0;}
+  .replay{pointer-events:auto;}
+  .back{position:fixed;top:14px;left:14px;z-index:30;pointer-events:auto;background:rgba(8,12,18,.7);
+    border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:13px;color:var(--muted);}
+</style>
+</head>
+<body>
+
+<!-- ================= MENU ================= -->
+<div id="menu" class="screen active">
+  <div class="logo">HiMonster Hunter<br><span>The Last Hunt</span></div>
+  <div class="sub">Your phone is the crossbow. Aim with your hands, draw the string with your thumb, release to fire.</div>
+
+  <div class="btn" onclick="App.startSolo()">
+    <span class="ic">🎯</span><div><b>Play Solo (this device)</b><small>Test the gyro feel right now — no TV needed</small></div>
+  </div>
+
+  <div class="btn" onclick="App.startDisplay()">
+    <span class="ic">📺</span><div><b>Be the Display (TV / Tablet)</b><small>Shows the world. Hunters join with a code</small></div>
+  </div>
+
+  <div class="field"><input id="joinCode" maxlength="4" placeholder="CODE" /></div>
+  <div class="btn" onclick="App.startController()">
+    <span class="ic">🏹</span><div><b>Be a Hunter (Phone controller)</b><small>Enter the code shown on the TV, then hold like a crossbow</small></div>
+  </div>
+  <div class="hint">Tip: open the Display on your big screen, then open this page on each phone and join with the 4-letter code.</div>
+</div>
+
+<!-- ================= CONTROLLER ================= -->
+<div id="controller" class="screen">
+  <div class="back" onclick="App.goMenu()">‹ Leave</div>
+  <div class="ctop">
+    <div class="status"><span id="cdot" class="dot"></span><span id="cstatus">connecting…</span></div>
+    <div class="pill" id="croom">— — — —</div>
+  </div>
+  <div class="arrowsel" id="arrowSel"></div>
+  <div class="drawzone" id="drawZone">
+    <div class="powerbar"><i id="powerFill"></i></div>
+    <div class="big" id="drawTitle">Hold like a crossbow</div>
+    <div class="small" id="drawHint">Point the phone at your target on the TV.<br>Press &amp; pull your thumb <b>down</b> to draw — release to shoot.</div>
+  </div>
+  <div class="cbtns">
+    <button class="btn" style="flex:1" onclick="Input.calibrate()"><span class="ic">🎯</span> Recenter aim</button>
+  </div>
+</div>
+
+<!-- ================= DISPLAY / GAME ================= -->
+<div id="display" class="screen">
+  <div class="back" onclick="App.goMenu()">‹ Quit hunt</div>
+  <canvas id="game"></canvas>
+  <div class="overlay" id="overlay"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+/* ============================================================
+   HiMonster Hunter — single file
+   Modes: solo (local) | display (TV host) | controller (phone)
+   Pairing: PeerJS (WebRTC P2P + QR) — no database needed
+   ============================================================ */
+
+/* ---- PeerJS / WebRTC config ----
+   PeerJS runs its own free signaling broker, so there is NOTHING to set up.
+   STUN lets devices on the same wifi (or even different networks) connect P2P.
+   For strict networks / mobile data, add a free TURN server in the slot below. */
+const PREFIX = 'himonster-hh-';
+const ICE = { iceServers:[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:3478'},
+  {urls:'stun:stun.cloudflare.com:3478'}
+  // ---- optional TURN for any-network reliability ----
+  // ,{urls:'turn:global.relay.metered.ca:80', username:'USER', credential:'PASS'}
+]};
+const rand4 = ()=>Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*30)]).join('');
+let peer=null, conn=null;
+
+/* ---- Tunables ---- */
+const SENS_YAW = 1/22;   // 22deg sweep -> half screen width
+const SENS_PITCH = 1/18; // 18deg sweep -> half screen height
+const WRITE_MS = 45;     // controller -> peer send throttle
+const ARROW_TYPES = [
+  {id:'normal', label:'Standard', color:'#cfe6ff'},
+  {id:'fire',   label:'Fire',     color:'#ff8a3d'},
+  {id:'ice',    label:'Ice',      color:'#6ec7ff'},
+  {id:'explo',  label:'Explosive',color:'#ffd23d'},
+  {id:'harpoon',label:'Harpoon',  color:'#b07cff'},
+];
+const HUNTER_COLORS = ['#39d2c0','#f6c45a','#ff7a9c','#7ca8ff'];
+
+/* ============================================================
+   INPUT — reads device orientation + touch (phone side)
+   Produces a normalized aim {x:-1..1, y:-1..1}, draw 0..1, shot events.
+   ============================================================ */
+const Input = {
+  baseAlpha:null, baseBeta:null,
+  alpha:0, beta:0, gamma:0,
+  aimX:0, aimY:0,
+  drawing:false, draw:0, startTouchY:0,
+  arrowIdx:0,
+  focus:false,
+  lastFlick:0, lastAlpha:null, flickDir:null, flickTs:0,
+  onShot:null, onChange:null,
+
+  async requestPermissions(){
+    // iOS 13+ needs explicit permission for orientation & motion
+    try{
+      if (typeof DeviceOrientationEvent!=='undefined' && DeviceOrientationEvent.requestPermission){
+        await DeviceOrientationEvent.requestPermission();
+      }
+      if (typeof DeviceMotionEvent!=='undefined' && DeviceMotionEvent.requestPermission){
+        await DeviceMotionEvent.requestPermission();
+      }
+    }catch(e){ /* user denied; aim just won't move */ }
+  },
+
+  start(){
+    window.addEventListener('deviceorientation', this._orient.bind(this), true);
+    this.bindTouch();
+    setTimeout(()=>this.calibrate(), 400);
+  },
+
+  _orient(e){
+    if (e.alpha==null) return;
+    this.alpha=e.alpha; this.beta=e.beta; this.gamma=e.gamma;
+    if (this.baseAlpha==null){ this.baseAlpha=e.alpha; this.baseBeta=e.beta; }
+
+    // yaw delta with wrap-around
+    let da = this.alpha - this.baseAlpha;
+    if (da>180) da-=360; if (da<-180) da+=360;
+    let dp = this.beta - this.baseBeta;
+
+    // map to -1..1 (invert yaw so turning right moves crosshair right)
+    this.aimX = clamp(-da * SENS_YAW, -1.2, 1.2);
+    this.aimY = clamp(dp * SENS_PITCH, -1.2, 1.2);
+
+    // flick detection for dodge (fast yaw change)
+    const now=performance.now();
+    if (this.lastAlpha!=null){
+      let v = this.alpha - this.lastAlpha;
+      if (v>180) v-=360; if (v<-180) v+=360;
+      if (Math.abs(v) > 14 && now-this.flickTs>500){
+        this.flickDir = v>0 ? 'left' : 'right';
+        this.flickTs = now;
+        if (navigator.vibrate) navigator.vibrate(20);
+      }
+    }
+    this.lastAlpha=this.alpha;
+  },
+
+  calibrate(){
+    this.baseAlpha=this.alpha; this.baseBeta=this.beta;
+    this.aimX=0; this.aimY=0;
+    if (navigator.vibrate) navigator.vibrate(30);
+  },
+
+  bindTouch(){
+    const z = document.getElementById('drawZone');
+    const startFn = (y, touches)=>{
+      if (touches>=2){ this.focus=true; return; }
+      this.drawing=true; this.startTouchY=y; this.draw=0;
+      if (navigator.vibrate) navigator.vibrate(15);
+    };
+    const moveFn = (y)=>{
+      if (!this.drawing) return;
+      const pull = Math.max(0, y - this.startTouchY);
+      const prev=this.draw;
+      this.draw = clamp(pull/260, 0, 1);
+      // crossbow haptics on crossing thresholds
+      if (navigator.vibrate){
+        if (prev<0.5 && this.draw>=0.5) navigator.vibrate(20);
+        if (prev<0.98 && this.draw>=0.98) navigator.vibrate([15,25,40]);
+      }
+    };
+    const endFn = (touches)=>{
+      if (this.focus && touches<2) this.focus=false;
+      if (!this.drawing) return;
+      this.drawing=false;
+      const power=this.draw; this.draw=0;
+      if (power>0.12){
+        if (navigator.vibrate) navigator.vibrate(60);
+        this.onShot && this.onShot({
+          power, type:ARROW_TYPES[this.arrowIdx].id,
+          x:this.aimX, y:this.aimY
+        });
+      }
+    };
+    z.addEventListener('touchstart', e=>{ e.preventDefault(); startFn(e.touches[0].clientY, e.touches.length); }, {passive:false});
+    z.addEventListener('touchmove',  e=>{ e.preventDefault(); moveFn(e.touches[0].clientY); }, {passive:false});
+    z.addEventListener('touchend',   e=>{ e.preventDefault(); endFn(e.touches.length); }, {passive:false});
+    // mouse fallback for desktop solo testing
+    z.addEventListener('mousedown', e=>startFn(e.clientY,1));
+    window.addEventListener('mousemove', e=>moveFn(e.clientY));
+    window.addEventListener('mouseup', ()=>endFn(0));
+  },
+
+  setArrow(i){ this.arrowIdx=i; },
+
+  // returns a snapshot the renderer / network uses
+  snapshot(){
+    let dodge=null;
+    if (this.flickDir && performance.now()-this.flickTs<120){ dodge=this.flickDir; }
+    return { x:this.aimX, y:this.aimY, draw:this.draw, focus:this.focus,
+             type:ARROW_TYPES[this.arrowIdx].id, dodge };
+  }
+};
+function clamp(v,a,b){return v<a?a:v>b?b:v;}
+
+/* ============================================================
+   GAME ENGINE (runs on Display + Solo)
+   ============================================================ */
+const Game = {
+  canvas:null, ctx:null, W:0, H:0, dpr:1,
+  players:{},            // id -> {color,name,aim:{x,y},draw,type,focus,arrows:[],dmg}
+  monster:null, stage:0, partyHp:100,
+  arrows:[], floaters:[], particles:[],
+  attackTimer:5, attacking:false, attackWindow:0,
+  timeScale:1, shake:0, state:'fight', last:0,
+
+  init(){
+    this.canvas=document.getElementById('game');
+    this.ctx=this.canvas.getContext('2d');
+    this.resize(); window.addEventListener('resize',()=>this.resize());
+    this.players={}; this.arrows=[]; this.floaters=[]; this.particles=[];
+    this.stage=0; this.partyHp=100; this.state='fight';
+    this.spawnMonster(0);
+    this.last=performance.now();
+    requestAnimationFrame(this.loop.bind(this));
+  },
+  resize(){
+    this.dpr=Math.min(window.devicePixelRatio||1,2);
+    this.W=window.innerWidth; this.H=window.innerHeight;
+    this.canvas.width=this.W*this.dpr; this.canvas.height=this.H*this.dpr;
+    this.canvas.style.width=this.W+'px'; this.canvas.style.height=this.H+'px';
+    this.ctx.setTransform(this.dpr,0,0,this.dpr,0,0);
+  },
+
+  addPlayer(id,name){
+    if (this.players[id]) return this.players[id];
+    const idx=Object.keys(this.players).length%HUNTER_COLORS.length;
+    this.players[id]={id,color:HUNTER_COLORS[idx],name:name||('Hunter '+(idx+1)),
+      aim:{x:0,y:0},draw:0,type:'normal',focus:false,lastShot:0,dmg:0};
+    return this.players[id];
+  },
+  removePlayer(id){ delete this.players[id]; },
+
+  feed(id,data){               // update player input from network/local
+    const p=this.players[id]; if(!p) return;
+    if(data.x!=null)p.aim.x=data.x; if(data.y!=null)p.aim.y=data.y;
+    p.draw=data.draw||0; p.type=data.type||'normal'; p.focus=!!data.focus;
+    if(data.shotId && data.shotId!==p.lastShot){
+      p.lastShot=data.shotId;
+      this.fire(p,{power:data.shotPower||0.6,type:data.type||'normal',x:data.x||0,y:data.y||0});
+    }
+    if(data.dodge){ this.spawnDust(p); }
+  },
+
+  /* ---- Monster factory ---- */
+  spawnMonster(stage){
+    const cx=this.W/2, cy=this.H*0.46, base=Math.min(this.W,this.H);
+    const defs=[
+      {type:'titan', name:'Stoneback Titan', color:'#6b7a8d', col2:'#48535f',
+        scale:base/620, maxHp:1600+stage*400, speed:14, flying:false, underground:false,
+        wp:[{n:'Eye',dx:-46,dy:-150,r:18,tier:'crit'},{n:'Eye',dx:18,dy:-150,r:18,tier:'crit'},
+            {n:'Head',dx:-14,dy:-130,r:46,tier:'weak'},{n:'Neck Crystal',dx:-14,dy:-66,r:30,tier:'crit'}]},
+      {type:'wyvern', name:'Thunder Wyvern', color:'#7d6bff', col2:'#4a3fa6',
+        scale:base/700, maxHp:1300+stage*400, speed:120, flying:true, underground:false,
+        wp:[{n:'Head',dx:90,dy:-30,r:40,tier:'crit'},{n:'Wing',dx:-120,dy:0,r:44,tier:'weak'},
+            {n:'Wing',dx:120,dy:0,r:44,tier:'weak'},{n:'Core',dx:0,dy:20,r:30,tier:'weak'}]},
+      {type:'serpent', name:'Ice Serpent', color:'#7fd3ff', col2:'#3a86b3',
+        scale:base/640, maxHp:1500+stage*400, speed:40, flying:false, underground:true,
+        wp:[{n:'Head',dx:0,dy:-40,r:48,tier:'crit'},{n:'Frost Sac',dx:0,dy:50,r:34,tier:'weak'}]},
+    ];
+    const d=defs[stage%3];
+    this.monster={...d, x:cx, y:cy, hp:d.maxHp, t:0, surf:1, pinned:0,
+      slow:0, burn:0, hitFlash:0, baseY:cy, baseX:cx};
+  },
+
+  /* ---- Firing & hit resolution ---- */
+  fire(p,shot){
+    // origin: hunter position at bottom, offset per player
+    const ids=Object.keys(this.players); const i=Math.max(0,ids.indexOf(p.id));
+    const ox=this.W*( (i+1)/(ids.length+1) );
+    const oy=this.H-30;
+    const tx=this.W/2 + shot.x*this.W*0.5;
+    const ty=this.H*0.46 + shot.y*this.H*0.5;
+    this.arrows.push({x:ox,y:oy,tx,ty,t:0,dur:0.28,power:shot.power,
+      type:shot.type,owner:p,color:(ARROW_TYPES.find(a=>a.id===shot.type)||{}).color||'#fff'});
+  },
+  resolveArrow(a){
+    const m=this.monster; if(!m){return;}
+    // serpent only hittable while surfaced
+    if(m.underground && m.surf<0.5){ this.floater(a.tx,a.ty,'MISS','#7a8aa0'); return; }
+    let mult=0, tier=null;
+    for(const w of m.wp){
+      const wx=m.x + w.dx*m.scale*(m.flip?-1:1);
+      const wy=m.y + w.dy*m.scale;
+      if(Math.hypot(a.tx-wx,a.ty-wy) <= w.r*m.scale + (a.type==='explo'?28:0)){
+        if(w.tier==='crit'){mult=2.5;tier='crit';} else {mult=1;tier='weak';}
+        break;
+      }
+    }
+    // body hit
+    if(mult===0){
+      if(Math.hypot(a.tx-m.x,a.ty-m.y) < 130*m.scale){ mult=0.2; tier='body'; }
+      else { this.floater(a.tx,a.ty,'MISS','#7a8aa0'); return; }
+    }
+    // power scaling
+    const pw = a.power>0.95?1.25 : a.power>0.7?1 : a.power>0.45?0.8 : 0.5;
+    let base = tier==='crit'?250 : tier==='weak'?100 : 20;
+    let dmg = Math.round(base*pw*mult/( tier==='body'?1: (tier==='crit'?2.5:1) ));
+    if(tier==='crit') dmg=Math.round(250*pw);
+    else if(tier==='weak') dmg=Math.round(100*pw);
+    else dmg=Math.round(20*pw);
+
+    // arrow type effects
+    if(a.type==='fire'){ m.burn=Math.max(m.burn,3); }
+    if(a.type==='ice'){ m.slow=Math.max(m.slow,3); }
+    if(a.type==='explo'){ dmg=Math.round(dmg*1.2); this.boom(a.tx,a.ty); }
+    if(a.type==='harpoon' && m.flying){ m.pinned=Math.max(m.pinned,3); }
+
+    m.hp-=dmg; m.hitFlash=0.25;
+    if(a.owner) a.owner.dmg+=dmg;
+    this.floater(a.tx,a.ty, dmg + (tier==='crit'?'!':''),
+      tier==='crit'?'#ffd23d':tier==='weak'?'#ff8a3d':'#cfe6ff', tier==='crit');
+    this.sparks(a.tx,a.ty,a.color);
+    if(m.hp<=0) this.defeatMonster();
+  },
+  defeatMonster(){
+    this.boom(this.monster.x,this.monster.y);
+    this.stage++;
+    if(this.stage>=6){ this.state='victory'; return; }
+    setTimeout(()=>{ if(this.state==='fight') this.spawnMonster(this.stage); },900);
+    this.monster=null;
+  },
+
+  /* ---- FX helpers ---- */
+  floater(x,y,txt,color,big){ this.floaters.push({x,y,txt,color,t:0,big:!!big}); },
+  floater2:0,
+  sparks(x,y,c){ for(let i=0;i<8;i++){const a=Math.random()*6.28,s=2+Math.random()*4;
+    this.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,t:0,life:.5,c});} },
+  boom(x,y){ this.shake=12; for(let i=0;i<26;i++){const a=Math.random()*6.28,s=3+Math.random()*7;
+    this.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,t:0,life:.7,c:'#ffd23d',big:true});} },
+  spawnDust(p){ /* dodge dust */ this.shake=Math.max(this.shake,4); },
+
+  /* ---- main loop ---- */
+  loop(now){
+    let dt=(now-this.last)/1000; this.last=now; if(dt>0.05)dt=0.05;
+    // focus / slow-mo if any player focusing
+    const anyFocus=Object.values(this.players).some(p=>p.focus);
+    this.timeScale += ((anyFocus?0.4:1)-this.timeScale)*0.2;
+    const sdt=dt*this.timeScale;
+    if(this.state==='fight') this.update(sdt,dt);
+    this.render(dt);
+    requestAnimationFrame(this.loop.bind(this));
+  },
+  update(sdt,dt){
+    const m=this.monster;
+    if(m){
+      m.t+=sdt;
+      const slowF = m.slow>0?0.4:1; if(m.slow>0)m.slow-=dt;
+      const pin = m.pinned>0?0:1; if(m.pinned>0)m.pinned-=dt;
+      if(m.burn>0){ m.burn-=dt; m.hp-=18*dt; if(m.hp<=0)this.defeatMonster(); }
+      // movement by type
+      if(m.flying){ m.x=m.baseX+Math.sin(m.t*0.6)*this.W*0.32*pin;
+                    m.y=m.baseY+Math.sin(m.t*1.1)*40; m.flip=Math.cos(m.t*0.6)<0; }
+      else if(m.underground){ m.surf=(Math.sin(m.t*0.7)+0.6); m.surf=clamp(m.surf,0,1);
+                    m.x=m.baseX+Math.sin(m.t*0.5)*this.W*0.18; }
+      else { m.x=m.baseX+Math.sin(m.t*0.5)*22*slowF; m.y=m.baseY+Math.sin(m.t*1.4)*6; }
+      if(m.hitFlash>0)m.hitFlash-=dt;
+    }
+    // arrows
+    for(const a of this.arrows){
+      a.t+=sdt;
+      const k=clamp(a.t/a.dur,0,1);
+      a.cx=a.x+(a.tx-a.x)*k;
+      a.cy=a.y+(a.ty-a.y)*k - Math.sin(k*Math.PI)*60; // arc
+      if(k>=1 && !a.done){ a.done=true; this.resolveArrow(a); }
+    }
+    this.arrows=this.arrows.filter(a=>a.t<a.dur+0.05);
+    // floaters/particles
+    for(const f of this.floaters){f.t+=dt;f.y-=40*dt;}
+    this.floaters=this.floaters.filter(f=>f.t<1);
+    for(const p of this.particles){p.t+=dt;p.x+=p.vx;p.y+=p.vy;p.vy+=0.25;}
+    this.particles=this.particles.filter(p=>p.t<p.life);
+    if(this.shake>0)this.shake-=dt*30;
+
+    // monster attacks the party
+    this.attackTimer-=dt;
+    if(this.attackTimer<=0 && !this.attacking){ this.attacking=true; this.attackWindow=1.2; }
+    if(this.attacking){
+      this.attackWindow-=dt;
+      if(this.attackWindow<=0){
+        // did anyone dodge recently? (handled via dodge feed -> shake). Simplify: chip party hp
+        this.partyHp-=8; this.shake=Math.max(this.shake,10);
+        this.attacking=false; this.attackTimer=5+Math.random()*3;
+        if(this.partyHp<=0){ this.partyHp=0; this.state='defeat'; }
+      }
+    }
+  },
+
+  /* ---- rendering ---- */
+  render(dt){
+    const c=this.ctx,W=this.W,H=this.H;
+    c.save();
+    if(this.shake>0){c.translate((Math.random()-.5)*this.shake,(Math.random()-.5)*this.shake);}
+    // sky
+    const g=c.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#10202e');g.addColorStop(0.55,'#16303b');g.addColorStop(1,'#0a1118');
+    c.fillStyle=g;c.fillRect(-20,-20,W+40,H+40);
+    // distant mountains
+    this.mountains(c,W,H,'#13242f',H*0.62,0.6);
+    this.mountains(c,W,H,'#0e1c25',H*0.7,1.0);
+    // ground
+    c.fillStyle='#0c151b';c.fillRect(-20,H*0.78,W+40,H);
+    // monster
+    if(this.monster) this.drawMonster(c,this.monster);
+    // arrows
+    for(const a of this.arrows){
+      if(a.cx==null)continue;
+      c.strokeStyle=a.color;c.lineWidth=4;c.lineCap='round';
+      const ang=Math.atan2(a.cy-(a.py??a.cy),a.cx-(a.px??a.cx-1));
+      c.beginPath();c.moveTo(a.cx-Math.cos(ang)*14,a.cy-Math.sin(ang)*14);
+      c.lineTo(a.cx,a.cy);c.stroke();
+      a.px=a.cx;a.py=a.cy;
+    }
+    // particles
+    for(const p of this.particles){
+      c.globalAlpha=1-p.t/p.life;c.fillStyle=p.c;
+      const r=p.big?4:2.4;c.beginPath();c.arc(p.x,p.y,r,0,6.28);c.fill();
+    }
+    c.globalAlpha=1;
+    // crosshairs (per player)
+    for(const id in this.players) this.drawCrosshair(c,this.players[id]);
+    // floaters
+    for(const f of this.floaters){
+      c.globalAlpha=1-f.t;c.fillStyle=f.color;
+      c.font=(f.big?'800 30px':'700 22px')+' DM Sans, sans-serif';
+      c.textAlign='center';c.fillText(f.txt,f.x,f.y);
+    }
+    c.globalAlpha=1;
+    c.restore();
+    this.hud(c,W,H);
+  },
+  mountains(c,W,H,col,base,scale){
+    c.fillStyle=col;c.beginPath();c.moveTo(-20,base);
+    let x=-20,seed=scale*100;
+    while(x<W+40){const h=base-(40+Math.abs(Math.sin(x*0.01+seed))*120*scale);
+      c.lineTo(x,h);x+=80;}
+    c.lineTo(W+40,base);c.lineTo(W+40,H);c.lineTo(-20,H);c.closePath();c.fill();
+  },
+  drawMonster(c,m){
+    const s=m.scale, flash=m.hitFlash>0;
+    c.save();c.translate(m.x,m.y);if(m.flip)c.scale(-1,1);
+    const body=flash?'#d9e6f2':m.color, dk=flash?'#aeb9c4':m.col2;
+    if(m.underground && m.surf<0.5){ c.globalAlpha=0.25; }
+    c.globalAlpha *= (m.underground? clamp(m.surf,0.25,1):1);
+    if(m.type==='titan'){
+      // legs
+      c.fillStyle=dk; this.rrect(c,-90*s,40*s,55*s,120*s,12*s); this.rrect(c,40*s,40*s,55*s,120*s,12*s);
+      // body
+      c.fillStyle=body; this.rrect(c,-120*s,-70*s,240*s,160*s,40*s);
+      // rocky back
+      c.fillStyle=dk; for(let i=-2;i<=2;i++){c.beginPath();
+        c.moveTo(i*45*s,-70*s);c.lineTo(i*45*s+24*s,-110*s);c.lineTo(i*45*s+48*s,-70*s);c.closePath();c.fill();}
+      // head
+      c.fillStyle=body; this.rrect(c,-60*s,-170*s,90*s,90*s,26*s);
+    } else if(m.type==='wyvern'){
+      c.fillStyle=dk; // wings
+      c.beginPath();c.moveTo(0,0);c.lineTo(-180*s,-40*s);c.lineTo(-150*s,40*s);c.closePath();c.fill();
+      c.beginPath();c.moveTo(0,0);c.lineTo(180*s,-40*s);c.lineTo(150*s,40*s);c.closePath();c.fill();
+      c.fillStyle=body; this.rrect(c,-40*s,-30*s,80*s,110*s,26*s); // torso
+      this.rrect(c,55*s,-55*s,70*s,55*s,18*s); // head
+    } else { // serpent
+      c.fillStyle=dk; for(let i=0;i<5;i++){c.beginPath();
+        c.arc(Math.sin(m.t+i)*60*s,(i*36)*s,(34-i*4)*s,0,6.28);c.fill();}
+      c.fillStyle=body; this.rrect(c,-48*s,-72*s,96*s,80*s,30*s); // head
+    }
+    // weak points (glow)
+    for(const w of m.wp){
+      const a=0.5+0.5*Math.sin(m.t*4);
+      c.fillStyle=w.tier==='crit'?`rgba(255,210,61,${0.35+a*0.4})`:`rgba(255,138,61,${0.25+a*0.3})`;
+      c.beginPath();c.arc(w.dx*s,w.dy*s,w.r*s,0,6.28);c.fill();
+      c.fillStyle=w.tier==='crit'?'#fff3c4':'#ffd9b3';
+      c.beginPath();c.arc(w.dx*s,w.dy*s,w.r*s*0.4,0,6.28);c.fill();
+    }
+    c.restore();c.globalAlpha=1;
+  },
+  rrect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);
+    c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.fill();},
+  drawCrosshair(c,p){
+    const x=this.W/2+p.aim.x*this.W*0.5, y=this.H*0.46+p.aim.y*this.H*0.5;
+    c.save();c.translate(x,y);
+    // over weak point? color cue
+    let hot=false; const m=this.monster;
+    if(m) for(const w of m.wp){const wx=m.x+w.dx*m.scale*(m.flip?-1:1),wy=m.y+w.dy*m.scale;
+      if(Math.hypot(x-wx,y-wy)<w.r*m.scale){hot=true;break;}}
+    c.strokeStyle=hot?'#ffd23d':p.color;c.lineWidth=2.5;
+    const r=14+p.draw*10;
+    c.beginPath();c.arc(0,0,r,0,6.28);c.stroke();
+    c.beginPath();c.moveTo(-r-8,0);c.lineTo(-r+4,0);c.moveTo(r-4,0);c.lineTo(r+8,0);
+    c.moveTo(0,-r-8);c.lineTo(0,-r+4);c.moveTo(0,r-4);c.lineTo(0,r+8);c.stroke();
+    if(p.draw>0){c.strokeStyle=hot?'#ffd23d':p.color;c.lineWidth=3;
+      c.beginPath();c.arc(0,0,r+6,-1.57,-1.57+p.draw*6.28);c.stroke();}
+    c.fillStyle=p.color;c.font='600 11px DM Sans';c.textAlign='center';
+    c.fillText(p.name,0,r+22);
+    c.restore();
+  },
+  hud(c,W,H){
+    // monster hp
+    if(this.monster){
+      const m=this.monster,bw=Math.min(W*0.7,520),bx=(W-bw)/2,by=70;
+      c.fillStyle='rgba(8,12,18,.7)';this.rrect(c,bx-2,by-2,bw+4,16,8);
+      c.fillStyle='#2a3744';this.rrect(c,bx,by,bw,12,6);
+      c.fillStyle=m.burn>0?'#ff8a3d':'#ff5a6a';this.rrect(c,bx,by,bw*clamp(m.hp/m.maxHp,0,1),12,6);
+      c.fillStyle='#e8eef6';c.font='700 15px DM Sans';c.textAlign='center';
+      c.fillText(m.name,W/2,by-10);
+    }
+    // party hp + status icons
+    c.textAlign='left';c.fillStyle='#8aa0b8';c.font='600 13px DM Sans';
+    c.fillText('Party',16,H-44);
+    c.fillStyle='#1d2733';this.rrect(c,16,H-36,160,12,6);
+    c.fillStyle=this.partyHp>30?'#39d2c0':'#ff5a6a';this.rrect(c,16,H-36,160*this.partyHp/100,12,6);
+    if(this.timeScale<0.8){c.fillStyle='rgba(110,199,255,.9)';c.font='700 14px DM Sans';
+      c.textAlign='center';c.fillText('◎ FOCUS',W/2,H-30);}
+    if(this.attacking){c.fillStyle='#ff5a6a';c.font='800 22px DM Sans';c.textAlign='center';
+      c.fillText('⚠ INCOMING — DODGE!',W/2,H*0.7);}
+  },
+
+  // expose state for overlay UI
+  isOver(){return this.state==='defeat'||this.state==='victory';}
+};
+
+/* ============================================================
+   APP — wires modes, menus, networking
+   ============================================================ */
+const App = {
+  mode:null, room:null, rafLocal:null, writeTimer:null, shotCounter:0,
+
+  show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');},
+  goMenu(){ this.cleanup(); this.show('menu'); },
+
+  cleanup(){
+    if(this.rafLocal){cancelAnimationFrame(this.rafLocal);this.rafLocal=null;}
+    if(this.writeTimer){clearInterval(this.writeTimer);this.writeTimer=null;}
+    try{ if(conn) conn.close(); }catch(_){}
+    try{ if(peer) peer.destroy(); }catch(_){}
+    conn=null; peer=null;
+    Game.state='idle';
+    this.mode=null;
+  },
+
+  /* ---------- SOLO ---------- */
+  async startSolo(){
+    this.mode='solo'; this.show('display');
+    document.querySelector('#display .back').onclick=()=>this.goMenu();
+    await Input.requestPermissions(); Input.start();
+    // build a tiny arrow selector floating? keep solo simple: tap top-left cycles arrow
+    Game.init(); const p=Game.addPlayer('local','You');
+    Input.onShot=(s)=>{ Game.fire(p,s); };
+    const tick=()=>{ const snap=Input.snapshot();
+      Game.feed('local',{x:snap.x,y:snap.y,draw:snap.draw,type:snap.type,focus:snap.focus,dodge:snap.dodge});
+      // overlay a small draw zone for thumb (reuse controller drawzone invisibly): we attach touch to canvas
+      this.rafLocal=requestAnimationFrame(tick); };
+    // attach a transparent thumb area = whole bottom of screen for solo
+    this.attachSoloTouch();
+    tick();
+    this.soloHint();
+  },
+  attachSoloTouch(){
+    const cv=document.getElementById('game');
+    const start=y=>{Input.drawing=true;Input.startTouchY=y;Input.draw=0;if(navigator.vibrate)navigator.vibrate(15);};
+    const move=y=>{if(!Input.drawing)return;Input.draw=clamp(Math.max(0,y-Input.startTouchY)/260,0,1);};
+    const end=()=>{if(!Input.drawing)return;Input.drawing=false;const pw=Input.draw;Input.draw=0;
+      if(pw>0.12){if(navigator.vibrate)navigator.vibrate(60);
+        Input.onShot&&Input.onShot({power:pw,type:ARROW_TYPES[Input.arrowIdx].id,x:Input.aimX,y:Input.aimY});}};
+    cv.addEventListener('touchstart',e=>{e.preventDefault();
+      if(e.touches.length>=2){Input.focus=true;return;} start(e.touches[0].clientY);},{passive:false});
+    cv.addEventListener('touchmove',e=>{e.preventDefault();move(e.touches[0].clientY);},{passive:false});
+    cv.addEventListener('touchend',e=>{e.preventDefault();if(e.touches.length<2)Input.focus=false;end();},{passive:false});
+    cv.addEventListener('mousedown',e=>start(e.clientY));
+    window.addEventListener('mousemove',e=>move(e.clientY));
+    window.addEventListener('mouseup',end);
+    // double-tap top-left to cycle arrow type
+    let lastTap=0;
+    cv.addEventListener('touchstart',e=>{const t=e.touches[0];
+      if(t.clientX<120&&t.clientY<120){const n=Date.now();
+        if(n-lastTap<350){Input.arrowIdx=(Input.arrowIdx+1)%ARROW_TYPES.length;
+          this.toast('Arrow: '+ARROW_TYPES[Input.arrowIdx].label);}lastTap=n;}});
+  },
+  soloHint(){ this.toast('Move phone to aim • pull down to draw • release to shoot • 2 fingers = focus • double-tap top-left = change arrow'); },
+
+  /* ---------- DISPLAY (TV host) ----------
+     PeerJS hosts under a fixed id (PREFIX+code). Hunters connect to it.
+     Gameplay flows over the P2P data connection — no database. */
+  startDisplay(){
+    this.mode='display'; this.show('display');
+    document.querySelector('#display .back').onclick=()=>this.goMenu();
+    this.room=rand4();
+    Game.init();
+    peer=new Peer(PREFIX+this.room,{debug:1,config:ICE});
+    peer.on('error',e=>this.toast('Pairing issue ('+e.type+') — go back & retry'));
+    peer.on('connection',c=>{
+      const id=c.peer;
+      c.on('open',()=>{ Game.addPlayer(id,'Hunter'); });
+      c.on('data',d=>{ Game.feed(id,d); });
+      c.on('close',()=>{ Game.removePlayer(id); });
+    });
+    this.renderRoomBanner();
+    this.overlayLoop();
+  },
+  renderRoomBanner(){
+    const url=location.origin+location.pathname+'?join='+this.room;
+    const ov=document.getElementById('overlay');
+    ov.innerHTML=`<div class="room-banner"><div class="room-card">
+      <div class="lbl">SCAN OR ENTER CODE</div>
+      <div class="qrbox" id="qrbox"></div>
+      <div class="code">${this.room}</div>
+      <div class="lbl" style="margin-top:6px">phone → "Be a Hunter"</div></div></div>`;
+    const qb=document.getElementById('qrbox'); qb.innerHTML='';
+    try{ new QRCode(qb,{text:url,width:148,height:148,colorDark:'#08111a',colorLight:'#ffffff'}); }catch(_){}
+    const iv=setInterval(()=>{ if(Object.keys(Game.players).length>0){ ov.innerHTML=''; clearInterval(iv);} },500);
+  },
+
+  /* ---------- CONTROLLER (phone) ----------
+     Connects to the host's PeerJS id and streams input over P2P. */
+  async startController(){
+    const code=(document.getElementById('joinCode').value||'').toUpperCase().trim();
+    if(code.length<4){this.toast('Enter the 4-letter code from the TV');return;}
+    this.mode='controller'; this.room=code; this.show('controller');
+    document.getElementById('croom').textContent=code.split('').join(' ');
+    this.buildArrowSel();
+    const setStatus=(ok,txt)=>{ document.getElementById('cdot').classList.toggle('ok',ok);
+      document.getElementById('cstatus').textContent=txt; };
+    setStatus(false,'enabling motion…');
+    await Input.requestPermissions(); Input.start();
+    setStatus(false,'connecting…');
+
+    peer=new Peer({debug:1,config:ICE});
+    peer.on('error',e=>{ setStatus(false,'could not connect — check code'); this.toast('Could not connect ('+e.type+')'); });
+    peer.on('open',()=>{
+      conn=peer.connect(PREFIX+code,{reliable:true}); // reliable so shots never drop
+      conn.on('open',()=>{
+        setStatus(true,'connected · P2P');
+        const send=obj=>{ if(conn&&conn.open){ try{conn.send(obj);}catch(_){} } };
+        Input.onShot=(s)=>{ this.shotCounter++;
+          send({shotId:this.shotCounter, shotPower:s.power, type:s.type, x:s.x, y:s.y}); };
+        this.writeTimer=setInterval(()=>{
+          const snap=Input.snapshot();
+          const u={x:round2(snap.x),y:round2(snap.y),draw:round2(snap.draw),
+            type:snap.type,focus:snap.focus};
+          if(snap.dodge)u.dodge=snap.dodge+':'+Date.now();
+          send(u);
+          document.getElementById('powerFill').style.height=(snap.draw*100)+'%';
+          document.getElementById('drawTitle').textContent= Input.drawing? 'Drawing… release to fire':'Hold like a crossbow';
+        }, WRITE_MS);
+      });
+      conn.on('close',()=>setStatus(false,'disconnected'));
+    });
+  },
+  buildArrowSel(){
+    const el=document.getElementById('arrowSel'); el.innerHTML='';
+    ARROW_TYPES.forEach((a,i)=>{
+      const d=document.createElement('div');d.className='a'+(i===Input.arrowIdx?' on':'');
+      d.textContent=a.label; if(i===Input.arrowIdx){d.style.background=a.color;}
+      d.onclick=()=>{Input.setArrow(i);this.buildArrowSel();};
+      el.appendChild(d);
+    });
+  },
+
+  /* overlay loop for win/lose screens on display & solo */
+  overlayLoop(){
+    const ov=document.getElementById('overlay');
+    const check=()=>{
+      if(Game.state==='victory'||Game.state==='defeat'){
+        const win=Game.state==='victory';
+        ov.innerHTML=`<div class="center-msg"><h1 style="color:${win?'#39d2c0':'#ff5a6a'}">${win?'HUNT COMPLETE':'HUNTERS DOWN'}</h1>
+          <p>${win? 'Every monster has fallen.':'The party was overwhelmed.'}</p>
+          <button class="btn replay" style="max-width:240px;justify-content:center" onclick="App.restart()">Hunt again</button></div>`;
+      }
+      if(this.mode==='display'||this.mode==='solo') requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  },
+  restart(){ document.getElementById('overlay').innerHTML=''; 
+    if(this.mode==='display'){this.renderRoomBanner();}
+    const keep=Object.keys(Game.players).map(id=>({id,name:Game.players[id].name}));
+    Game.init(); keep.forEach(k=>Game.addPlayer(k.id,k.name));
+  },
+
+  /* helpers */
+  makeCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ';let s='';for(let i=0;i<4;i++)s+=c[Math.floor(Math.random()*c.length)];return s;},
+  toast(msg){let t=document.createElement('div');t.className='toast';t.textContent=msg;
+    document.body.appendChild(t);setTimeout(()=>t.remove(),3200);},
+};
+function round2(v){return Math.round(v*100)/100;}
+
+// solo also needs the win/lose overlay loop
+const _origSolo=App.startSolo.bind(App);
+App.startSolo=async function(){ await _origSolo(); App.overlayLoop(); };
+
+// deep-link: ?join=CODE  → scanning the host's QR jumps straight into the hunter
+(function(){
+  const q=new URLSearchParams(location.search);
+  const code=(q.get('join')||'').toUpperCase().trim();
+  if(code.length>=4){
+    const inp=document.getElementById('joinCode'); inp.value=code;
+    // wait for a tap-free start where possible; on iOS the motion permission
+    // prompt fires inside startController on first interaction.
+    setTimeout(()=>App.startController(), 300);
+  }
+})();
+</script>
+</body>
+</html>
