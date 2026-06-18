@@ -58,6 +58,8 @@
   .room-banner{position:fixed;top:0;left:0;right:0;display:flex;justify-content:center;padding:16px;}
   .room-card{background:rgba(8,12,18,.78);border:1px solid var(--line);border-radius:18px;padding:18px 26px;text-align:center;backdrop-filter:blur(8px);}
   .room-card .code{font-size:44px;font-weight:800;letter-spacing:10px;color:var(--accent);}
+  .room-card .qrbox{background:#fff;padding:10px;border-radius:14px;display:inline-block;margin:8px 0;}
+  .room-card .qrbox img,.room-card .qrbox canvas{display:block;}
   .room-card .lbl{font-size:12px;color:var(--muted);letter-spacing:2px;}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(8,12,18,.85);
     border:1px solid var(--line);padding:10px 16px;border-radius:12px;font-size:13px;color:var(--muted);}
@@ -116,44 +118,34 @@
   <div class="overlay" id="overlay"></div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 /* ============================================================
    HiMonster Hunter — single file
    Modes: solo (local) | display (TV host) | controller (phone)
-   Relay: Firebase Realtime Database
+   Pairing: PeerJS (WebRTC P2P + QR) — no database needed
    ============================================================ */
 
-/* ---- Firebase config ----
-   IMPORTANT: set the correct databaseURL for YOUR Realtime Database.
-   - US default:        https://himonster-hunter-default-rtdb.firebaseio.com
-   - Asia (Mumbai/SE):  https://himonster-hunter-default-rtdb.asia-southeast1.firebasedatabase.app
-   Check Firebase Console → Realtime Database, copy the URL shown at the top. */
-const DATABASE_URL = "https://himonster-hunter-default-rtdb.asia-southeast1.firebasedatabase.app";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDJpSTJcemojALKtD-fPFkw_Ys2w-YvI4I",
-  authDomain: "himonster-hunter.firebaseapp.com",
-  databaseURL: DATABASE_URL,
-  projectId: "himonster-hunter",
-  storageBucket: "himonster-hunter.firebasestorage.app",
-  messagingSenderId: "269748367751",
-  appId: "1:269748367751:web:28425f21ae8260721d6322"
-};
-
-let db = null;
-function initFirebase(){
-  if (db) return db;
-  try { firebase.initializeApp(firebaseConfig); db = firebase.database(); }
-  catch(e){ console.error("Firebase init failed", e); }
-  return db;
-}
+/* ---- PeerJS / WebRTC config ----
+   PeerJS runs its own free signaling broker, so there is NOTHING to set up.
+   STUN lets devices on the same wifi (or even different networks) connect P2P.
+   For strict networks / mobile data, add a free TURN server in the slot below. */
+const PREFIX = 'himonster-hh-';
+const ICE = { iceServers:[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:3478'},
+  {urls:'stun:stun.cloudflare.com:3478'}
+  // ---- optional TURN for any-network reliability ----
+  // ,{urls:'turn:global.relay.metered.ca:80', username:'USER', credential:'PASS'}
+]};
+const rand4 = ()=>Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*30)]).join('');
+let peer=null, conn=null;
 
 /* ---- Tunables ---- */
 const SENS_YAW = 1/22;   // 22deg sweep -> half screen width
 const SENS_PITCH = 1/18; // 18deg sweep -> half screen height
-const WRITE_MS = 45;     // controller -> RTDB throttle
+const WRITE_MS = 45;     // controller -> peer send throttle
 const ARROW_TYPES = [
   {id:'normal', label:'Standard', color:'#cfe6ff'},
   {id:'fire',   label:'Fire',     color:'#ff8a3d'},
@@ -610,12 +602,7 @@ const Game = {
    APP — wires modes, menus, networking
    ============================================================ */
 const App = {
-  mode:null, room:null, pid:null, roomRef:null,
-  rafLocal:null, writeTimer:null, shotCounter:0,
-  peers:{}, peerPc:null, dataCh:null,
-  // STUN only helps discover candidates; on the same wifi the connection uses
-  // local "host" candidates and stays fully on your LAN (no relay).
-  rtcConfig:{ iceServers:[{urls:'stun:stun.l.google.com:19302'}] },
+  mode:null, room:null, rafLocal:null, writeTimer:null, shotCounter:0,
 
   show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.getElementById(id).classList.add('active');},
@@ -624,16 +611,11 @@ const App = {
   cleanup(){
     if(this.rafLocal){cancelAnimationFrame(this.rafLocal);this.rafLocal=null;}
     if(this.writeTimer){clearInterval(this.writeTimer);this.writeTimer=null;}
-    for(const id in this.peers){ try{this.peers[id].pc.close();}catch(_){} }
-    this.peers={};
-    if(this.peerPc){ try{this.peerPc.close();}catch(_){} this.peerPc=null; }
-    if(this.roomRef){
-      if(this.mode==='display'){ try{this.roomRef.remove();}catch(_){} }
-      else if(this.pid){ try{this.roomRef.child('signals/'+this.pid).remove();}catch(_){} }
-      try{this.roomRef.off();}catch(_){}
-    }
+    try{ if(conn) conn.close(); }catch(_){}
+    try{ if(peer) peer.destroy(); }catch(_){}
+    conn=null; peer=null;
     Game.state='idle';
-    this.mode=null; this.pid=null;
+    this.mode=null;
   },
 
   /* ---------- SOLO ---------- */
@@ -677,105 +659,72 @@ const App = {
   soloHint(){ this.toast('Move phone to aim • pull down to draw • release to shoot • 2 fingers = focus • double-tap top-left = change arrow'); },
 
   /* ---------- DISPLAY (TV host) ----------
-     Firebase = signaling only (offer/answer/ICE handshake).
-     All gameplay flows over a direct WebRTC DataChannel = LAN speed. */
+     PeerJS hosts under a fixed id (PREFIX+code). Hunters connect to it.
+     Gameplay flows over the P2P data connection — no database. */
   startDisplay(){
-    if(!initFirebase()){this.toast('Firebase not ready — check databaseURL');return;}
-    this.mode='display'; this.show('display'); this.peers={};
+    this.mode='display'; this.show('display');
     document.querySelector('#display .back').onclick=()=>this.goMenu();
-    this.room=this.makeCode();
-    this.roomRef=db.ref('rooms/'+this.room);
-    this.roomRef.child('meta').set({host:true,started:Date.now()});
-    this.roomRef.onDisconnect().remove();           // wipe room if TV drops
+    this.room=rand4();
     Game.init();
-    // each hunter posts a signal node under signals/{id}
-    const sigRef=this.roomRef.child('signals');
-    sigRef.on('child_added', snap=>this.hostHandleSignal(snap.key, sigRef.child(snap.key)));
-    sigRef.on('child_removed', snap=>{ this.closePeer(snap.key); Game.removePlayer(snap.key); });
+    peer=new Peer(PREFIX+this.room,{debug:1,config:ICE});
+    peer.on('error',e=>this.toast('Pairing issue ('+e.type+') — go back & retry'));
+    peer.on('connection',c=>{
+      const id=c.peer;
+      c.on('open',()=>{ Game.addPlayer(id,'Hunter'); });
+      c.on('data',d=>{ Game.feed(id,d); });
+      c.on('close',()=>{ Game.removePlayer(id); });
+    });
     this.renderRoomBanner();
     this.overlayLoop();
   },
-  hostHandleSignal(id, ref){
-    if(this.peers[id]) return;
-    const pc=new RTCPeerConnection(this.rtcConfig);
-    this.peers[id]={pc};
-    Game.addPlayer(id,'Hunter');
-    pc.onicecandidate=e=>{ if(e.candidate) ref.child('hostCandidates').push(e.candidate.toJSON()); };
-    pc.ondatachannel=e=>{
-      const ch=e.channel; this.peers[id].ch=ch;
-      ch.onmessage=m=>{ try{ Game.feed(id, JSON.parse(m.data)); }catch(_){} };
-      ch.onclose=()=>{ this.closePeer(id); Game.removePlayer(id); };
-    };
-    ref.child('offer').on('value', async snap=>{
-      const offer=snap.val(); if(!offer || pc.currentRemoteDescription) return;
-      await pc.setRemoteDescription(offer);
-      const ans=await pc.createAnswer(); await pc.setLocalDescription(ans);
-      ref.child('answer').set({type:ans.type, sdp:ans.sdp});
-    });
-    ref.child('controllerCandidates').on('child_added', s=>{
-      const c=s.val(); if(c) pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{});
-    });
-  },
-  closePeer(id){ const p=this.peers[id]; if(p){ try{p.pc.close();}catch(_){} delete this.peers[id]; } },
   renderRoomBanner(){
+    const url=location.origin+location.pathname+'?join='+this.room;
     const ov=document.getElementById('overlay');
     ov.innerHTML=`<div class="room-banner"><div class="room-card">
-      <div class="lbl">JOIN CODE</div><div class="code">${this.room}</div>
-      <div class="lbl" style="margin-top:6px">open this site → "Be a Hunter"</div></div></div>`;
-    // hide banner after first hunter joins
+      <div class="lbl">SCAN OR ENTER CODE</div>
+      <div class="qrbox" id="qrbox"></div>
+      <div class="code">${this.room}</div>
+      <div class="lbl" style="margin-top:6px">phone → "Be a Hunter"</div></div></div>`;
+    const qb=document.getElementById('qrbox'); qb.innerHTML='';
+    try{ new QRCode(qb,{text:url,width:148,height:148,colorDark:'#08111a',colorLight:'#ffffff'}); }catch(_){}
     const iv=setInterval(()=>{ if(Object.keys(Game.players).length>0){ ov.innerHTML=''; clearInterval(iv);} },500);
   },
 
   /* ---------- CONTROLLER (phone) ----------
-     Builds a direct DataChannel to the TV; gameplay never touches the cloud. */
+     Connects to the host's PeerJS id and streams input over P2P. */
   async startController(){
     const code=(document.getElementById('joinCode').value||'').toUpperCase().trim();
     if(code.length<4){this.toast('Enter the 4-letter code from the TV');return;}
-    if(!initFirebase()){this.toast('Firebase not ready — check databaseURL');return;}
     this.mode='controller'; this.room=code; this.show('controller');
     document.getElementById('croom').textContent=code.split('').join(' ');
     this.buildArrowSel();
-    await Input.requestPermissions(); Input.start();
-    this.roomRef=db.ref('rooms/'+code);
     const setStatus=(ok,txt)=>{ document.getElementById('cdot').classList.toggle('ok',ok);
       document.getElementById('cstatus').textContent=txt; };
+    setStatus(false,'enabling motion…');
+    await Input.requestPermissions(); Input.start();
     setStatus(false,'connecting…');
 
-    const meta=await this.roomRef.child('meta').get();
-    if(!meta.exists()){ setStatus(false,'no display found — check code');
-      this.toast('No TV found with that code'); return; }
-
-    this.pid=this.roomRef.child('signals').push().key;
-    const sig=this.roomRef.child('signals/'+this.pid);
-    sig.onDisconnect().remove();
-
-    const pc=new RTCPeerConnection(this.rtcConfig); this.peerPc=pc;
-    const ch=pc.createDataChannel('hunt');   // reliable+ordered so shots never drop
-    this.dataCh=ch;
-    pc.onicecandidate=e=>{ if(e.candidate) sig.child('controllerCandidates').push(e.candidate.toJSON()); };
-    sig.child('hostCandidates').on('child_added',s=>{ const c=s.val();
-      if(c) pc.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{}); });
-    sig.child('answer').on('value',async s=>{ const a=s.val();
-      if(a && !pc.currentRemoteDescription) await pc.setRemoteDescription(a); });
-    const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
-    sig.child('offer').set({type:offer.type, sdp:offer.sdp});
-
-    ch.onopen=()=>setStatus(true,'connected · LAN P2P');
-    ch.onclose=()=>setStatus(false,'disconnected');
-    pc.onconnectionstatechange=()=>{ if(pc.connectionState==='failed') setStatus(false,'connection failed'); };
-
-    const send=obj=>{ if(ch.readyState==='open'){ try{ch.send(JSON.stringify(obj));}catch(_){}} };
-    Input.onShot=(s)=>{ this.shotCounter++;
-      send({shotId:this.shotCounter, shotPower:s.power, type:s.type, x:s.x, y:s.y}); };
-    this.writeTimer=setInterval(()=>{
-      const snap=Input.snapshot();
-      const u={x:round2(snap.x),y:round2(snap.y),draw:round2(snap.draw),
-        type:snap.type,focus:snap.focus};
-      if(snap.dodge)u.dodge=snap.dodge+':'+Date.now();
-      send(u);
-      document.getElementById('powerFill').style.height=(snap.draw*100)+'%';
-      document.getElementById('drawTitle').textContent= Input.drawing? 'Drawing… release to fire':'Hold like a crossbow';
-    }, WRITE_MS);
+    peer=new Peer({debug:1,config:ICE});
+    peer.on('error',e=>{ setStatus(false,'could not connect — check code'); this.toast('Could not connect ('+e.type+')'); });
+    peer.on('open',()=>{
+      conn=peer.connect(PREFIX+code,{reliable:true}); // reliable so shots never drop
+      conn.on('open',()=>{
+        setStatus(true,'connected · P2P');
+        const send=obj=>{ if(conn&&conn.open){ try{conn.send(obj);}catch(_){} } };
+        Input.onShot=(s)=>{ this.shotCounter++;
+          send({shotId:this.shotCounter, shotPower:s.power, type:s.type, x:s.x, y:s.y}); };
+        this.writeTimer=setInterval(()=>{
+          const snap=Input.snapshot();
+          const u={x:round2(snap.x),y:round2(snap.y),draw:round2(snap.draw),
+            type:snap.type,focus:snap.focus};
+          if(snap.dodge)u.dodge=snap.dodge+':'+Date.now();
+          send(u);
+          document.getElementById('powerFill').style.height=(snap.draw*100)+'%';
+          document.getElementById('drawTitle').textContent= Input.drawing? 'Drawing… release to fire':'Hold like a crossbow';
+        }, WRITE_MS);
+      });
+      conn.on('close',()=>setStatus(false,'disconnected'));
+    });
   },
   buildArrowSel(){
     const el=document.getElementById('arrowSel'); el.innerHTML='';
@@ -818,11 +767,16 @@ function round2(v){return Math.round(v*100)/100;}
 const _origSolo=App.startSolo.bind(App);
 App.startSolo=async function(){ await _origSolo(); App.overlayLoop(); };
 
-// deep-link: ?mode=controller&room=ABCD  /  ?mode=display
+// deep-link: ?join=CODE  → scanning the host's QR jumps straight into the hunter
 (function(){
   const q=new URLSearchParams(location.search);
-  const m=q.get('mode');
-  if(m==='controller'){ const r=q.get('room'); if(r){document.getElementById('joinCode').value=r.toUpperCase();} }
+  const code=(q.get('join')||'').toUpperCase().trim();
+  if(code.length>=4){
+    const inp=document.getElementById('joinCode'); inp.value=code;
+    // wait for a tap-free start where possible; on iOS the motion permission
+    // prompt fires inside startController on first interaction.
+    setTimeout(()=>App.startController(), 300);
+  }
 })();
 </script>
 </body>

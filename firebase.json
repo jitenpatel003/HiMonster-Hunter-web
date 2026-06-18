@@ -6,14 +6,10 @@
       "**/.*",
       "**/.*/**",
       "**/node_modules/**",
-      "database.rules.json",
       "README.md"
     ],
     "rewrites": [
       { "source": "**", "destination": "/index.html" }
     ]
-  },
-  "database": {
-    "rules": "database.rules.json"
   }
 }
